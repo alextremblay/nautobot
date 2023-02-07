@@ -1,10 +1,8 @@
-import time
 import uuid
 from contextlib import contextmanager
 
-from celery.contrib.testing.worker import start_worker
 from django.contrib.auth import get_user_model
-from django.test import tag, TransactionTestCase as _TransactionTestCase
+from django.test import override_settings, tag, TransactionTestCase as _TransactionTestCase
 
 from nautobot.core.celery import app
 from nautobot.extras.context_managers import web_request_context
@@ -101,6 +99,12 @@ def run_job_for_testing(job, data=None, commit=True, username="test-user", reque
     return job_result
 
 
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True,
+    CELERY_TASK_EAGER_PROPOGATES=True,
+    CELERY_BROKER_URL="memory://",
+    CELERY_BACKEND="memory",
+)
 @tag("unit")
 class TransactionTestCase(_TransactionTestCase, NautobotTestCaseMixin):
     """
@@ -119,28 +123,16 @@ class TransactionTestCase(_TransactionTestCase, NautobotTestCaseMixin):
         self.setUpNautobot(client=True, populate_status=True)
 
 
+@override_settings(
+    CELERY_TASK_ALWAYS_EAGER=True,
+    CELERY_TASK_EAGER_PROPOGATES=True,
+    CELERY_BROKER_URL="memory://",
+    CELERY_BACKEND="memory",
+)
 class CeleryTestCase(TransactionTestCase):
     """
     Test class that provides a running Celery worker for the duration of the test case
     """
-
-    @classmethod
-    def setUpClass(cls):
-        """Start a celery worker"""
-        super().setUpClass()
-        # Special namespace loading of methods needed by start_worker, per the celery docs
-        app.loader.import_module("celery.contrib.testing.tasks")
-        cls.clear_worker()
-        # `celery.ping` not registered is a known issue https://github.com/celery/celery/issues/3642
-        # fixed by setting `perform_ping_check` to False
-        cls.celery_worker = start_worker(app, perform_ping_check=False, concurrency=1)
-        cls.celery_worker.__enter__()
-
-    @classmethod
-    def tearDownClass(cls):
-        """Stop the celery worker"""
-        super().tearDownClass()
-        cls.celery_worker.__exit__(None, None, None)
 
     @staticmethod
     def clear_worker():
@@ -155,4 +147,5 @@ class CeleryTestCase(TransactionTestCase):
         # and calling `.get()` on them is not working when the worker is in solo mode.
         # Needs more investigation and until then, these tasks run very quickly, so
         # simply delaying the test execution provides enough time for them to complete.
-        time.sleep(1)
+        pass
+        # time.sleep(1)
